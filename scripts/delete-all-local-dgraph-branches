@@ -1,3 +1,12 @@
-#! /bin/sh
+#!/bin/bash
 
-git branch | grep dgraph- | while read i; do git branch -d $i; done
+set -e
+
+current_branch=$(git branch --show-current)
+
+if [[ "$current_branch" == dgraph-* ]]; then
+    echo "Can't run from a dgraph-* prefixed branch, please checkout master (or any other branch name that doesn't start with 'dgraph-') and try again"
+    exit 1
+fi
+
+git branch | sed 's/^[* ]*//' | grep dgraph- | while read i; do git branch -d "$i"; done || true

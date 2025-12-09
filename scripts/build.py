@@ -17,6 +17,25 @@ def exec(*argv):
         raise Exception('Failed to exec ' + " ".join(argv))
     return res
 
+def exec_silent(*argv):
+    """Execute without raising on failure, return the result."""
+    res = sp.run(argv, stdout=sp.PIPE, stderr=sp.PIPE)
+    return res
+
+def get_current_branch():
+    res = exec_silent("git", "branch", "--show-current")
+    return res.stdout.decode('utf8').strip()
+
+def stash_changes():
+    """Stash any uncommitted changes. Returns True if changes were stashed."""
+    res = exec_silent("git", "stash", "push", "-m", "build.py auto-stash")
+    output = res.stdout.decode('utf8')
+    return "No local changes to save" not in output
+
+def pop_stash():
+    """Pop the stashed changes."""
+    exec_silent("git", "stash", "pop")
+
 def getBaseUrl(outSuffix=""):
     baseUrl = "https://dgraph.io/tour/"
     if BASE_URL_ENV in os.environ:
@@ -107,20 +126,38 @@ def buildAll(releases):
 
 
 def main():
-    releases = getReleases()
-    os.environ["CANONICAL_PATH"] = "https://dgraph.io/tour"
-    publicDir = os.environ.get(DEST_ENV) or 'public'
-    exec("./scripts/delete-all-local-dgraph-branches")
-    exec("rm", "-rf", publicDir)
-    exec("mkdir", publicDir)
+    # Capture starting branch and check it's not a dgraph- branch
+    starting_branch = get_current_branch()
+    print(f"Starting branch: {starting_branch}")
 
-    buildAll(releases)
+    if starting_branch.startswith("dgraph-"):
+        print("Can't run from a dgraph-* prefixed branch, please checkout master (or any other branch name that doesn't start with 'dgraph-') and try again")
+        raise SystemExit(1)
 
-    exec("git", "checkout", "master")
+    stashed = stash_changes()
+    if stashed:
+        print("Stashed uncommitted changes")
 
-    exec("rm", "-rf", "published")
-    exec("mv", publicDir, "published")
-    exec("git", "add", "published")
-    exec("git", "commit", "-m", "Hugo rebuild all branches")
+    try:
+        releases = getReleases()
+        os.environ["HUGO_CANONICAL_PATH"] = "https://dgraph.io/tour"
+        publicDir = os.environ.get(DEST_ENV) or 'public'
+        exec("./scripts/delete-all-local-dgraph-branches")
+        exec("rm", "-rf", publicDir)
+        exec("mkdir", publicDir)
+
+        buildAll(releases)
+
+        exec("rm", "-rf", "published")
+        exec("mv", publicDir, "published")
+        exec("git", "add", "published")
+        exec("git", "commit", "-m", "Hugo rebuild all branches")
+    finally:
+        # Always restore to starting branch and pop stash
+        print(f"Restoring to starting branch: {starting_branch}")
+        exec_silent("git", "checkout", starting_branch)
+        if stashed:
+            print("Restoring stashed changes")
+            pop_stash()
 
 main()
