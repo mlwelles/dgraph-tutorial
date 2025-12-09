@@ -13,5 +13,5 @@ if [[ $1 == "-p" || $1 == "--preview" ]]; then
       --baseURL="$2/tour/" 1> /dev/null
     echo -e "$(date) $GREEN  Done building. $RESET"
 else
-    hugo server -w --baseURL=http://localhost:1313/tour/ --config config.toml,releases.json
+    hugo server -w --baseURL=http://localhost:1313/ --config config.toml,releases.json
 fi
